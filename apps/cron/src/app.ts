@@ -32,7 +32,6 @@ export function buildApp() {
   }
 
   async function runAddictedSport(): Promise<void> {
-    if (!env.ADDICTED_SPORT_URL) return
     try {
       const reading = await scrapeAddictedSport(env.ADDICTED_SPORT_URL)
       await storeReading(reading)

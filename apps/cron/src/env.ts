@@ -6,6 +6,9 @@ export const env = useEnv({
   DATABASE_URL: z.string().min(1),
   SCRAPE_SCHEDULE: z.string().default('* * * * *'),
   HOLFUY_STATION_ID: z.string().default('1000'), // 1000 = Decollo Malcesine
-  ADDICTED_SPORT_URL: z.string().url().optional(), // non ancora implementato, vedi scrapers/addictedSport.ts
+  ADDICTED_SPORT_URL: z
+    .string()
+    .url()
+    .default('https://it.addicted-sports.com/webcam/gardasee/malcesine/'),
   LOGGER_URL: z.string().url().optional(),
 })
