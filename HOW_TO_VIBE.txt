@@ -1,0 +1,180 @@
+MALCESINE METEO — HOW TO VIBE
+=============================
+Convenzioni e pattern di questo monorepo. Leggi prima di toccare il codice.
+
+
+ENV VAR NAMING
+--------------
+Due livelli di scope, nessuna eccezione:
+
+  Globali (tutte le app)
+    DATABASE_URL
+
+  App-specific (prefisso = nome app)
+    API_PORT
+    WEB_PORT, VITE_API_URL
+    LOGGER_PORT, LOGGER_URL, LOGGER_FLUSH_INTERVAL_MS, LOGGER_DATA_DIR
+    SCRAPE_SCHEDULE, HOLFUY_STATION_ID, ADDICTED_SPORT_URL
+
+Ogni app valida le proprie variabili in src/env.ts con Zod.
+Se una variabile obbligatoria manca -> process.exit(1) prima dell'avvio.
+Variabili opzionali usano .optional() e il codice degrada con grazia.
+
+
+STRUTTURA DI UN'APP
+-------------------
+Ogni app in apps/* segue questo schema:
+
+  src/
+  ├── env.ts        Zod schema + export const env; exit(1) se invalido
+  ├── app.ts        buildApp() o equivalente; zero side-effect al modulo level
+  ├── index.ts      3-5 righe: import, build, listen/start
+  ├── db.ts         singleton DB (chiama useDatabase una volta)
+  └── routes/       (solo api) un file per gruppo di endpoint
+
+index.ts è il bootstrap, non la logica. Deve sembrare:
+  import { buildApp } from '@/app'
+  import { env } from '@/env'
+  const app = buildApp()
+  await app.listen({ port: env.FOO_PORT, host: '0.0.0.0' })
+
+
+STRUTTURA DI UN PACKAGE
+------------------------
+Ogni package in packages/* segue questo schema:
+
+  src/
+  ├── types.ts   fonte unica di verità per tutti i tipi del package
+  ├── index.ts   public API: esporta solo ciò che deve essere pubblico
+  └── *.ts       implementazione; importa tipi da @/types
+
+Non definire interfacce nei file di implementazione.
+Non riesportare tipi da file che non siano index.ts o types.ts.
+index.ts è il gatekeeper: se non è lì, non esiste per i consumer.
+
+
+FACTORY PATTERN
+---------------
+useDatabase(url)  ->  { db, pg, connect, heartbeat, getAliveServices }
+
+È l'unica factory pubblica di packages/db. Le app creano il singleton
+una volta in src/db.ts. Il caching ESM garantisce una sola istanza per processo.
+
+
+FUNCTION SIGNATURES (API pubblica)
+-----------------------------------
+Le funzioni esposte pubblicamente usano il pattern opts:
+
+  export async function foo(opts: FooOpts): Promise<Result> {
+    const { a, b, c } = opts
+    ...
+  }
+
+Le funzioni interne possono usare parametri posizionali normali.
+
+
+DRIZZLE CONFIG
+--------------
+drizzle-kit non trova drizzle.config.mjs da solo (cerca .json per default).
+Gli script in packages/db/package.json passano sempre --config esplicitamente:
+
+  "db:push": "drizzle-kit push --config drizzle.config.mjs"
+
+Non togliere --config o smette di funzionare senza messaggi utili.
+
+
+WITH-ENV
+--------
+@malcesine/with-env è un package interno (packages/with-env).
+Risale il CWD cercando pnpm-workspace.yaml, carica .env, spawna il comando.
+Variabili già presenti nel processo non vengono sovrascritte (prod-safe).
+
+Uso negli script delle app:
+  "dev":   "with-env tsx watch src/index.ts"
+  "start": "with-env node dist/index.js"
+
+Non usare mai node ../../scripts/... o path relativi per questo.
+
+
+SCRAPER METEO (apps/cron)
+--------------------------
+apps/cron è un microservizio a istanza singola (advisory lock
+pg_try_advisory_lock(42)). Ogni SCRAPE_SCHEDULE (default ogni minuto)
+interroga due centraline e scrive in packages/db → tabella `readings`.
+
+  apps/cron/src/scrapers/holfuy.ts        — stazione Holfuy 1000 (Decollo Malcesine)
+  apps/cron/src/scrapers/addictedSport.ts — stazione Addicted Sport (selettori TODO)
+
+Holfuy: la pagina pubblica (holfuy.com/en/data/<id>) mostra solo segnaposto
+statici — i valori live sono iniettati via JS da un endpoint JSON
+(holfuy.com/puget/mjso.php?k=<id>). Lo scraper interroga direttamente
+quell'endpoint: è la fonte reale dei numeri mostrati sulla pagina, non
+un'API separata.
+
+Ogni scraper ritorna uno ScrapedReading (apps/cron/src/scrapers/types.ts)
+o null se la stazione è offline / non ancora implementata; app.ts lo
+inserisce in `readings` senza ulteriore logica di business.
+
+
+PAGINE WEB — DUE FRONTEND
+--------------------------
+In decollo la connessione è spesso in edge/GPRS: due frontend separati,
+non uno responsive unico.
+
+  apps/web        — Vue 3 + Vite, dashboard completa, chiama l'API via fetch
+  apps/api /       — pagina HTML minimale server-side (apps/api/src/routes/mini.ts),
+                      zero JS/framework, giusto gli ultimi valori, pensata per
+                      connessioni lente
+
+Entrambe leggono da GET /current e GET /history esposte da apps/api.
+Non aggiungere framework client-side alla pagina minimale: il punto è
+che pesi pochi KB anche su una connessione pessima.
+
+
+DOCKER
+------
+Dockerfile in .docker/<app>.Dockerfile, sempre multi-stage:
+  dev      ->  pnpm install + CMD dev
+  builder  ->  build (apps/web: vite build; le altre: pnpm deploy --prod /standalone)
+  prod     ->  copia da builder, node dist/index.js (apps/web: nginx statico + proxy /api)
+
+Nel docker-compose: servizi dev senza -prod suffix (profilo [dev]),
+servizi prod con -prod suffix (profilo [prod]).
+postgres e altri servizi infra senza profilo = sempre disponibili.
+
+SCHEMA PORTE
+  4000 range, BASE + N dove N è il numero di istanza:
+
+    4001, 4002, ...   →  api      (BASE 4000)
+    4201, 4202, ...   →  logger   (BASE 4200)
+    4301, 4302, ...   →  web      (BASE 4300)
+
+  cron  →  nessuna porta (singleton via advisory lock)
+
+  Il .env contiene sempre l'istanza 1:
+    API_PORT=4001
+    LOGGER_PORT=4201
+    WEB_PORT=4301
+
+  Per un secondo deploy basta cambiare API_PORT=4002, LOGGER_PORT=4202, WEB_PORT=4302.
+  Se aggiungi un nuovo servizio con HTTP, prenditi il prossimo blocco di 100 (4400).
+
+I port binding nel compose usano variabili con fallback:
+  "${API_PORT:-4001}:${API_PORT:-4001}"
+  "${LOGGER_PORT:-4201}:${LOGGER_PORT:-4201}"
+  "${WEB_PORT:-4301}:${WEB_PORT:-4301}"
+
+Compose carica .env automaticamente, quindi il valore viene preso da lì.
+Gli URL interni tra container seguono lo stesso pattern:
+  LOGGER_URL: http://logger:${LOGGER_PORT:-4201}
+
+
+COSA NON FARE
+-------------
+- Non definire tipi fuori da types.ts in un package
+- Non usare process.env direttamente fuori da env.ts
+- Non fare import con path relativi ../../ tra package e app (usa workspace:*)
+- Non aggiungere PORT nuda: prefissa sempre con il nome dell'app (API_PORT, WEB_PORT, LOGGER_PORT)
+- Il package SDK del logger è @malcesine/logger; l'app container è @malcesine/logger-app (package.json name distinto per non confonderli)
+- Non dimenticare --config su drizzle-kit
+- Non aggiungere un framework JS alla pagina minimale di apps/api (mini.ts): deve restare leggibile su edge/GPRS

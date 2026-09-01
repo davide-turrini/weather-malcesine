@@ -1,0 +1,1 @@
+- [Pivot a Malcesine Meteo](project_pivot_to_weather.md) — da Spotifillum a reportistica meteo decollo Malcesine, stazioni Holfuy/addicted-sport, due frontend

@@ -1,0 +1,9 @@
+{
+  "name": "@malcesine/with-env",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "with-env": "./index.js"
+  }
+}

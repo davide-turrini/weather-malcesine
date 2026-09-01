@@ -1,0 +1,40 @@
+{
+  "name": "malcesine-meteo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.30.1",
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:api": "turbo dev --filter @malcesine/api",
+    "dev:cron": "turbo dev --filter @malcesine/cron",
+    "dev:web": "turbo dev --filter @malcesine/web",
+    "dev:logger": "turbo dev --filter @malcesine/logger-app",
+    "db:push": "pnpm --filter @malcesine/db db:push",
+    "db:studio": "pnpm --filter @malcesine/db db:studio",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "prepare": "husky",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset version && pnpm install --frozen-lockfile false"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@changesets/cli": "^2.27.5",
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-conventional": "^19.2.2",
+    "@types/node": "^20.14.0",
+    "husky": "^9.0.11",
+    "tsup": "^8.5.1",
+    "tsx": "^4.15.0",
+    "turbo": "^2.0.6",
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@malcesine/cron",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "with-env tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "with-env node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "fix": "biome check --write --unsafe src/",
+    "format": "biome format --write src/"
+  },
+  "dependencies": {
+    "@malcesine/banner": "workspace:*",
+    "@malcesine/db": "workspace:*",
+    "@malcesine/env": "workspace:*",
+    "@malcesine/heartbeat": "workspace:*",
+    "@malcesine/logger": "workspace:*",
+    "cheerio": "^1.0.0",
+    "node-cron": "^4.2.1",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@malcesine/with-env": "workspace:*",
+    "@types/node-cron": "^3.0.11"
+  }
+}

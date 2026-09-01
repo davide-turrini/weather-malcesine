@@ -1,0 +1,202 @@
+name: malcesine-meteo
+
+# Utilizzo:
+#   dev:  docker compose --profile dev up --watch
+#   prod: docker compose --profile prod up --build
+
+volumes:
+  pgdata:
+  loggerdata:
+
+services:
+
+  # ─── POSTGRES (condiviso dev e prod) ──────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: malcesine
+      POSTGRES_PASSWORD: malcesine
+      POSTGRES_DB: malcesine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malcesine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── DEV ──────────────────────────────────────────────────────────────────
+  logger:
+    build:
+      context: .
+      dockerfile: .docker/logger.Dockerfile
+      target: dev
+    profiles: [dev]
+    ports:
+      - "${LOGGER_PORT:-4201}:${LOGGER_PORT:-4201}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      LOGGER_PORT: "${LOGGER_PORT:-4201}"
+      DATABASE_URL: postgresql://malcesine:malcesine@postgres:5432/malcesine
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${LOGGER_PORT:-4201}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/logger/node_modules
+      - loggerdata:/app/apps/logger/data
+
+  cron:
+    build:
+      context: .
+      dockerfile: .docker/cron.Dockerfile
+      target: dev
+    profiles: [dev]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://malcesine:malcesine@postgres:5432/malcesine
+      LOGGER_URL: "http://logger:${LOGGER_PORT:-4201}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/cron/node_modules
+
+  api:
+    build:
+      context: .
+      dockerfile: .docker/api.Dockerfile
+      target: dev
+    profiles: [dev]
+    ports:
+      - "${API_PORT:-4001}:${API_PORT:-4001}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://malcesine:malcesine@postgres:5432/malcesine
+      API_PORT: "${API_PORT:-4001}"
+      LOGGER_URL: "http://logger:${LOGGER_PORT:-4201}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api/src
+          target: /app/apps/api/src
+        - action: sync
+          path: ./packages
+          target: /app/packages
+        - action: rebuild
+          path: package.json
+
+  web:
+    build:
+      context: .
+      dockerfile: .docker/web.Dockerfile
+      target: dev
+    profiles: [dev]
+    ports:
+      - "${WEB_PORT:-4301}:${WEB_PORT:-4301}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      WEB_PORT: "${WEB_PORT:-4301}"
+      VITE_API_URL: "http://localhost:${API_PORT:-4001}"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+
+  # ─── PROD ─────────────────────────────────────────────────────────────────
+  logger-prod:
+    build:
+      context: .
+      dockerfile: .docker/logger.Dockerfile
+      target: prod
+    profiles: [prod]
+    ports:
+      - "${LOGGER_PORT:-4201}:${LOGGER_PORT:-4201}"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      LOGGER_PORT: "${LOGGER_PORT:-4201}"
+      DATABASE_URL: postgresql://malcesine:malcesine@postgres:5432/malcesine
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${LOGGER_PORT:-4201}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - loggerdata:/app/data
+    restart: unless-stopped
+
+  cron-prod:
+    build:
+      context: .
+      dockerfile: .docker/cron.Dockerfile
+      target: prod
+    profiles: [prod]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://malcesine:malcesine@postgres:5432/malcesine
+      LOGGER_URL: "http://logger-prod:${LOGGER_PORT:-4201}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-prod:
+    build:
+      context: .
+      dockerfile: .docker/api.Dockerfile
+      target: prod
+    profiles: [prod]
+    ports:
+      - "${API_PORT:-4001}:${API_PORT:-4001}"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://malcesine:malcesine@postgres:5432/malcesine
+      API_PORT: "${API_PORT:-4001}"
+      LOGGER_URL: "http://logger-prod:${LOGGER_PORT:-4201}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web-prod:
+    build:
+      context: .
+      dockerfile: .docker/web.Dockerfile
+      target: prod
+      args:
+        VITE_API_URL: /api
+    profiles: [prod]
+    ports:
+      - "${WEB_PORT:-4301}:80"
+    depends_on:
+      - api-prod
+    restart: unless-stopped

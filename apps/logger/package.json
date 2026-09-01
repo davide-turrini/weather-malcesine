@@ -1,0 +1,25 @@
+{
+  "name": "@malcesine/logger-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "with-env tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "with-env node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "fix": "biome check --write --unsafe src/",
+    "format": "biome format --write src/"
+  },
+  "dependencies": {
+    "@malcesine/banner": "workspace:*",
+    "@malcesine/db": "workspace:*",
+    "@malcesine/env": "workspace:*",
+    "@malcesine/heartbeat": "workspace:*",
+    "fastify": "^5.8.5"
+  },
+  "devDependencies": {
+    "@malcesine/with-env": "workspace:*"
+  }
+}

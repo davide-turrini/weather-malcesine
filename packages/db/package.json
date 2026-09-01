@@ -1,0 +1,28 @@
+{
+  "name": "@malcesine/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "fix": "biome check --write --unsafe src/",
+    "format": "biome format --write src/",
+    "db:push": "with-env drizzle-kit push --config drizzle.config.mjs",
+    "db:studio": "with-env drizzle-kit studio --config drizzle.config.mjs"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.31.0",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@malcesine/with-env": "workspace:*",
+    "drizzle-kit": "^0.22.0"
+  }
+}
