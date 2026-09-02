@@ -1,32 +1,17 @@
-import type { Station } from '@malcesine/db'
 import { readings, STATIONS } from '@malcesine/db'
 import { desc, eq } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
+import { isInMarginalSector, STATION_META } from '@/config/stations'
 import { db } from '@/db'
-import { BUCKET_MINUTES, getWindSummary, type WindSummaryRow } from '@/queries/summary'
+import { WIND_RED_KMH, windLevel } from '@/lib/thresholds'
 
-const STATION_META: Record<Station, { role: string; name: string }> = {
-  holfuy: { role: 'Decollo', name: 'Holfuy' },
-  addicted_sport: { role: 'Atterraggio', name: 'Addicted Sport' },
-}
-
-const WIND_YELLOW_KMH = 15
-const WIND_RED_KMH = 25
-const TABLE_ROWS = 6
-const DEFAULT_BUCKET = 10
-
-function windLevel(speedKmh: number | null, gustKmh: number | null): 'normal' | 'yellow' | 'red' {
-  const worst = Math.max(speedKmh ?? 0, gustKmh ?? 0)
-  if (worst > WIND_RED_KMH) return 'red'
-  if (worst >= WIND_YELLOW_KMH) return 'yellow'
-  return 'normal'
-}
+const LOG_ROWS = 10
 
 function fmt(n: number | null | undefined, digits = 1): string {
   return n == null ? '—' : n.toFixed(digits)
 }
 
-function fmtTime(d: string | Date): string {
+function fmtTime(d: Date): string {
   return new Date(d).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 }
 
@@ -37,117 +22,84 @@ function escapeHtml(s: string): string {
   )
 }
 
+function windCellStyle(v: number | null): string {
+  if (v == null) return ''
+  if (v > WIND_RED_KMH) return ' style="color:red"'
+  if (v >= 15) return ' style="color:#c60"'
+  return ''
+}
+
 export default async function miniRoutes(fastify: FastifyInstance) {
-  fastify.get<{ Querystring: { bucket?: string } }>('/', async (req, reply) => {
-    const bucketParam = Number(req.query.bucket)
-    const bucketMinutes = BUCKET_MINUTES.includes(bucketParam as (typeof BUCKET_MINUTES)[number])
-      ? bucketParam
-      : DEFAULT_BUCKET
+  fastify.get('/', async (_req, reply) => {
+    const sections = await Promise.all(
+      STATIONS.map(async (station) => {
+        const meta = STATION_META[station]
+        const rows = await db
+          .select()
+          .from(readings)
+          .where(eq(readings.station, station))
+          .orderBy(desc(readings.recordedAt))
+          .limit(LOG_ROWS)
 
-    const [currentRows, summaryRows] = await Promise.all([
-      Promise.all(
-        STATIONS.map((station) =>
-          db
-            .select()
-            .from(readings)
-            .where(eq(readings.station, station))
-            .orderBy(desc(readings.recordedAt))
-            .limit(1)
-            .then((r) => r[0] ?? null),
-        ),
-      ),
-      getWindSummary({ bucketMinutes, minutes: bucketMinutes * (TABLE_ROWS + 1) }),
-    ])
+        const current = rows[0] ?? null
+        if (!current) {
+          return `<h2>${escapeHtml(meta.role)} &middot; ${escapeHtml(meta.name)}</h2>\n<p>Nessun dato disponibile.</p>`
+        }
 
-    const summaryByStation = new Map<string, WindSummaryRow[]>()
-    for (const row of summaryRows) {
-      const list = summaryByStation.get(row.station)
-      if (list) list.push(row)
-      else summaryByStation.set(row.station, [row])
-    }
+        const level = windLevel(current.windSpeedKmh, current.windGustKmh)
+        const statusLine =
+          level === 'red'
+            ? '<b style="color:red">PERICOLO</b> &mdash; raffica oltre la soglia di sicurezza (25 km/h)'
+            : level === 'yellow'
+              ? '<b style="color:#c60">CAUTELA</b> &mdash; vento sostenuto'
+              : 'buone condizioni'
 
-    const bucketLinks = BUCKET_MINUTES.map((m) => {
-      const active = m === bucketMinutes
-      return `<a href="/?bucket=${m}" class="bucketlink${active ? ' active' : ''}">${m} min</a>`
-    }).join('')
+        const marginal =
+          meta.directionSector &&
+          current.windDirDeg != null &&
+          isInMarginalSector(meta.directionSector, current.windDirDeg)
+            ? '<p><b style="color:#c60">Direzione ai margini del settore ottimale</b> (calibrazione centralina)</p>'
+            : ''
 
-    const cards = STATIONS.map((station, i) => {
-      const r = currentRows[i]
-      const meta = STATION_META[station]
-      const roleLabel = escapeHtml(meta.role)
-      const nameLabel = escapeHtml(meta.name)
+        const tableRows = rows
+          .map(
+            (r) =>
+              `<tr><td>${fmtTime(r.recordedAt)}</td><td${windCellStyle(r.windSpeedKmh)}>${fmt(r.windSpeedKmh, 0)}</td><td${windCellStyle(r.windGustKmh)}>${fmt(r.windGustKmh, 0)}</td><td>${r.windDirDeg ?? '—'}&deg; ${r.windDirLabel ?? ''}</td><td>${fmt(r.temperatureC)}</td></tr>`,
+          )
+          .join('\n')
 
-      if (!r) {
-        return `<section class="card">
-  <h2>${roleLabel} <span class="stationname">${nameLabel}</span></h2>
-  <p class="nodata">Nessun dato disponibile</p>
-</section>`
-      }
-
-      const level = windLevel(r.windSpeedKmh, r.windGustKmh)
-      const rows = (summaryByStation.get(station) ?? []).slice(0, TABLE_ROWS)
-      const tableRows = rows
-        .map(
-          (b) => `<tr>
-      <td>${fmtTime(b.bucketStart)}</td>
-      <td>${fmt(b.avgWindSpeedKmh, 0)}</td>
-      <td>${fmt(b.maxGustKmh, 0)}</td>
-      <td>${b.windDirLabel ?? '—'}</td>
-    </tr>`,
-        )
-        .join('')
-
-      return `<section class="card">
-  <h2>${roleLabel} <span class="stationname">${nameLabel}</span></h2>
-  <p class="wind wind-${level}">${fmt(r.windSpeedKmh, 0)}<span class="unit">km/h</span></p>
-  <p class="gust">raffica ${fmt(r.windGustKmh, 0)} km/h</p>
-  <p class="detail">${r.windDirLabel ?? '—'} (${r.windDirDeg ?? '—'}°) · ${fmt(r.temperatureC)}°C</p>
-  <p class="ts">agg. ${fmtTime(r.recordedAt)}</p>
-  ${
-    rows.length > 0
-      ? `<table class="summary">
-    <thead><tr><th>ora</th><th>media</th><th>raffica</th><th>dir</th></tr></thead>
-    <tbody>${tableRows}</tbody>
-  </table>`
-      : ''
-  }
-</section>`
-    }).join('\n')
+        return `<h2>${escapeHtml(meta.role)} &middot; ${escapeHtml(meta.name)}</h2>
+<p>
+${statusLine}<br>
+Vento: <b>${fmt(current.windSpeedKmh, 0)}</b> km/h &mdash; Raffica: <b${windCellStyle(current.windGustKmh)}>${fmt(current.windGustKmh, 0)}</b> km/h<br>
+Direzione: ${current.windDirDeg ?? '—'}&deg; (${current.windDirLabel ?? '—'}) &mdash; Temperatura: ${fmt(current.temperatureC)}&deg;C
+</p>
+${marginal}<table>
+<tr><th>Ora</th><th>Vento km/h</th><th>Raffica km/h</th><th>Direz.</th><th>Temp &deg;C</th></tr>
+${tableRows}
+</table>`
+      }),
+    )
 
     const html = `<!doctype html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="60">
 <title>Decollo Malcesine</title>
 <style>
-* { box-sizing: border-box; }
-body{font-family:system-ui,sans-serif;background:#eef1f5;color:#111;margin:0;padding:1rem}
-h1{font-size:1.1rem;margin:0 0 .75rem;color:#111}
-.buckets{margin-bottom:.75rem}
-.bucketlink{display:inline-block;padding:.3rem .7rem;margin-right:.4rem;border-radius:6px;background:#fff;color:#334155;text-decoration:none;font-size:.85rem;border:1px solid #dbe1e8}
-.bucketlink.active{background:#334155;color:#fff;border-color:#334155}
-section.card{background:#fff;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-h2{font-size:1rem;color:#111;margin:0 0 .5rem;text-transform:uppercase;letter-spacing:.02em}
-.stationname{font-size:.75rem;color:#8a94a3;text-transform:none;font-weight:400}
-.wind{font-size:3.2rem;font-weight:800;margin:.1rem 0;line-height:1;color:#111}
-.wind .unit{font-size:1.2rem;font-weight:500;color:#8a94a3;margin-left:.35rem}
-.wind-yellow{color:#a15c00;background:#fff3cd;display:inline-block;padding:.1rem .6rem;border-radius:10px}
-.wind-red{color:#fff;background:#dc2626;display:inline-block;padding:.1rem .6rem;border-radius:10px}
-.gust{font-size:1.1rem;margin:.2rem 0;color:#334155}
-.detail{font-size:1rem;margin:.2rem 0;color:#334155}
-.nodata{color:#8a94a3}
-.ts{color:#8a94a3;font-size:.8rem;margin:.3rem 0 .6rem}
-table.summary{width:100%;border-collapse:collapse;font-size:.9rem;margin-top:.4rem}
-table.summary th{text-align:left;color:#8a94a3;font-weight:600;font-size:.75rem;text-transform:uppercase;padding:.25rem .3rem;border-bottom:1px solid #eef1f5}
-table.summary td{padding:.3rem;border-bottom:1px solid #f3f4f6}
+body { font-family: sans-serif; margin: 12px; }
+table { border-collapse: collapse; margin: 6px 0 18px; }
+td, th { border: 1px solid #999; padding: 3px 6px; text-align: right; }
+th { text-align: right; }
 </style>
 </head>
 <body>
 <h1>Decollo Malcesine</h1>
-<div class="buckets">${bucketLinks}</div>
-${cards}
+<p>Aggiornato ${fmtTime(new Date())} &mdash; la pagina si aggiorna da sola ogni minuto.</p>
+${sections.join('\n\n')}
+<p><small>Pagina minimale per connessioni lente in decollo.</small></p>
 </body>
 </html>`
 

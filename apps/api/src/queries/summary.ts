@@ -1,7 +1,7 @@
 import type { Station } from '@malcesine/db'
 import { pg } from '@/db'
 
-export const BUCKET_MINUTES = [5, 10, 15, 30] as const
+export const BUCKET_MINUTES = [5, 10, 15, 30, 60] as const
 export type BucketMinutes = (typeof BUCKET_MINUTES)[number]
 
 export interface WindSummaryRow {
@@ -10,6 +10,7 @@ export interface WindSummaryRow {
   avgWindSpeedKmh: number | null
   maxWindSpeedKmh: number | null
   maxGustKmh: number | null
+  avgTemperatureC: number | null
   windDirLabel: string | null
   windDirDeg: number | null
   samples: number
@@ -31,6 +32,7 @@ export async function getWindSummary(opts: {
       avg(wind_speed_kmh) AS "avgWindSpeedKmh",
       max(wind_speed_kmh) AS "maxWindSpeedKmh",
       max(wind_gust_kmh) AS "maxGustKmh",
+      avg(temperature_c) AS "avgTemperatureC",
       (array_agg(wind_dir_label ORDER BY wind_speed_kmh DESC NULLS LAST))[1] AS "windDirLabel",
       (array_agg(wind_dir_deg ORDER BY wind_speed_kmh DESC NULLS LAST))[1] AS "windDirDeg",
       count(*)::int AS "samples"

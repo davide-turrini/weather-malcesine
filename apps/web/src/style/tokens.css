@@ -1,0 +1,47 @@
+:root {
+  --ink: #0b0b0b;
+  --ink-soft: #52514e;
+  --ink-muted: #898781;
+  --line: #e1e0d9;
+  --line-strong: #c3c2b7;
+  --surface: #ffffff;
+  --page: #f9f9f7;
+  --accent: #2a78d6;
+  --accent-dark: #1c5cab;
+  --accent-wash: rgba(42, 120, 214, 0.08);
+  --good: #0ca30c;
+  --warning: #fab219;
+  --warning-ink: #8a5a00;
+  --critical: #d03b3b;
+  --critical-ink: #a02323;
+  --r-lg: 16px;
+  --r-md: 12px;
+  --r-sm: 8px;
+  --shadow-card: 0 1px 2px rgba(11, 11, 11, 0.04), 0 6px 16px rgba(11, 11, 11, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--page);
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+}

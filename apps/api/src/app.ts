@@ -2,6 +2,7 @@ import cors from '@fastify/cors'
 import Fastify from 'fastify'
 import { getAliveServices } from '@/db'
 import miniRoutes from '@/routes/mini'
+import stationsRoutes from '@/routes/stations'
 import weatherRoutes from '@/routes/weather'
 
 export async function buildApp() {
@@ -36,6 +37,7 @@ export async function buildApp() {
   })
 
   fastify.register(weatherRoutes)
+  fastify.register(stationsRoutes)
   fastify.register(miniRoutes)
 
   return fastify
