@@ -46,8 +46,8 @@ deployare, sulla macchina serve anche il file `Caddyfile` accanto al compose —
 il deploy "git repository" di Portainer (consigliato, vedi sotto) Portainer clona
 l'intera cartella `deploy/caddy/` e lo trova da solo.
 
-Apri [`deploy/caddy/Caddyfile`](../deploy/caddy/Caddyfile) e sostituisci
-`meteo.tuodominio.it` con il tuo dominio reale **prima** di pushare su GitHub.
+Il [`Caddyfile`](../deploy/caddy/Caddyfile) ha già il blocco per
+`weather-malcesine.davide-turrini.it` pronto.
 
 Ogni progetto futuro sul VPS aggiunge solo un blocco nuovo in questo file e fa
 redeploy dello stack `caddy` — niente altra configurazione.
@@ -114,8 +114,8 @@ shell nel container `postgres` da Portainer e usa `psql` direttamente.
 ## 6. Verifica
 
 ```bash
-curl https://meteo.tuodominio.it/api/health
-curl https://meteo.tuodominio.it/
+curl https://weather-malcesine.davide-turrini.it/api/health
+curl https://weather-malcesine.davide-turrini.it/
 ```
 
 La pagina minimale (per l'edge/GPRS in decollo) resta raggiungibile direttamente

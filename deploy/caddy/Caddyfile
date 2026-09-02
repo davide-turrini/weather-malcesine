@@ -2,7 +2,6 @@
 # uno stack sul VPS — non serve toccare nient'altro (Caddy fa reload da solo se lanci
 # `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`, oppure ricrea il container).
 
-# Sostituisci con il tuo dominio reale.
-meteo.tuodominio.it {
+weather-malcesine.davide-turrini.it {
 	reverse_proxy malcesine-meteo-web-prod-1:80
 }
