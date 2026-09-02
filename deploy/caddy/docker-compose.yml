@@ -1,0 +1,27 @@
+name: caddy
+
+# Reverse proxy CONDIVISO del VPS, non specifico di questo progetto — vedi ../../doc/deploy.md.
+# Si deploya UNA volta sola come stack Portainer a parte; ogni progetto (malcesine-meteo compreso)
+# si aggancia alla rete esterna "web" e aggiunge il suo blocco nel Caddyfile.
+
+networks:
+  web:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    networks:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
