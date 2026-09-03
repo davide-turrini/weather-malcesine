@@ -1,0 +1,87 @@
+DEPLOY — weather-malcesine.davide-turrini.it
+==============================================
+Guida completa: doc/deploy.md. Questo file è solo i comandi, in ordine.
+
+
+0. DOCKER (se non c'è già)
+---------------------------
+curl -fsSL https://get.docker.com | sh
+
+
+1. PORTAINER
+------------
+docker volume create portainer_data
+docker run -d \
+  -p 8000:8000 -p 9443:9443 \
+  --name portainer \
+  --restart=always \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v portainer_data:/data \
+  portainer/portainer-ce:latest
+
+Apri https://<ip-vps>:9443 e crea l'utente admin.
+
+
+2. RETE CONDIVISA + CADDY (una volta per tutto il VPS)
+-------------------------------------------------------
+docker network create web
+
+In Portainer: Stacks > Add stack > Repository
+  repo:    git@github.com:davide-turrini/weather-malcesine.git
+  path:    deploy/caddy/docker-compose.yml
+  nome:    caddy
+Deploy.
+
+(Il Caddyfile ha già il blocco per weather-malcesine.davide-turrini.it,
+punta a malcesine-meteo-web-prod-1 — il container che creiamo al punto 3.)
+
+
+3. STACK DEL PROGETTO
+----------------------
+In Portainer: Stacks > Add stack > Repository
+  repo:    git@github.com:davide-turrini/weather-malcesine.git
+  path:    docker-compose.yml
+  nome:    malcesine-meteo
+
+Variabili d'ambiente da aggiungere nello stack:
+  POSTGRES_USER=<scegli tu, non "malcesine">
+  POSTGRES_PASSWORD=<scegli tu, non "malcesine">
+  POSTGRES_DB=malcesine
+  API_PORT=4001
+  WEB_PORT=4301
+  LOGGER_PORT=4201
+  LOGGER_DATA_DIR=./data/logs
+  SCRAPE_SCHEDULE=* * * * *
+  HOLFUY_STATION_ID=1000
+  ADDICTED_SPORT_URL=https://it.addicted-sports.com/webcam/gardasee/malcesine/
+  COMPOSE_PROFILES=prod
+
+Deploy. Portainer builda le immagini -prod e le avvia.
+
+
+4. INIZIALIZZARE IL DATABASE (solo la prima volta)
+----------------------------------------------------
+Dal tuo Mac, tunnel SSH verso il postgres del VPS (chiuso su 127.0.0.1, non
+raggiungibile da internet):
+
+ssh -L 5544:127.0.0.1:5432 <utente>@<ip-vps> -N &
+
+DATABASE_URL="postgresql://<POSTGRES_USER>:<POSTGRES_PASSWORD>@localhost:5544/malcesine" \
+  pnpm --filter @malcesine/db db:push
+
+kill %1   (per chiudere il tunnel)
+
+
+5. VERIFICA
+-----------
+curl https://weather-malcesine.davide-turrini.it/api/health
+curl https://weather-malcesine.davide-turrini.it/
+
+Pagina minimale (edge/GPRS), se preferisci saltare il dominio:
+http://<ip-vps>:4001/
+
+
+DEPLOY SUCCESSIVI
+-----------------
+Portainer > stack malcesine-meteo > Pull and redeploy.
+Se cambia lo schema del DB, ripeti anche il punto 4.
