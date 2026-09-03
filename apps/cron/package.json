@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@malcesine/banner": "workspace:*",
+    "@malcesine/cache": "workspace:*",
     "@malcesine/db": "workspace:*",
     "@malcesine/env": "workspace:*",
     "@malcesine/heartbeat": "workspace:*",

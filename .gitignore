@@ -26,3 +26,6 @@ pnpm-debug.log*
 
 # logger locale (flush su disco)
 apps/logger/data/
+
+# archivio letture locale (dump giornaliero da Redis)
+apps/cron/data/

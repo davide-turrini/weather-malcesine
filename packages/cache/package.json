@@ -1,0 +1,21 @@
+{
+  "name": "@malcesine/cache",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "fix": "biome check --write --unsafe src/",
+    "format": "biome format --write src/"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1"
+  }
+}

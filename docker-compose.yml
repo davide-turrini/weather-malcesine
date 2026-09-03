@@ -7,6 +7,8 @@ name: malcesine-meteo
 volumes:
   pgdata:
   loggerdata:
+  redisdata:
+  readingsdata:
 
 networks:
   default:
@@ -28,6 +30,22 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U malcesine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── REDIS (condiviso dev e prod) ──────────────────────────────────────────
+  # Cache delle letture meteo (finestra scorrevole 24h) archiviate poi su file dal
+  # cron — vedi apps/cron/src/cache.ts e archive.ts. Non e' (ancora) nel percorso
+  # delle route live: quelle restano su Postgres.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -72,13 +90,17 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://${POSTGRES_USER:-malcesine}:${POSTGRES_PASSWORD:-malcesine}@postgres:5432/${POSTGRES_DB:-malcesine}
       LOGGER_URL: "http://logger:${LOGGER_PORT:-4201}"
+      REDIS_URL: "redis://redis:6379"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - .:/app
       - /app/node_modules
       - /app/apps/cron/node_modules
+      - readingsdata:/app/apps/cron/data
 
   api:
     build:
@@ -168,9 +190,14 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-malcesine}:${POSTGRES_PASSWORD:-malcesine}@postgres:5432/${POSTGRES_DB:-malcesine}
       LOGGER_URL: "http://logger-prod:${LOGGER_PORT:-4201}"
+      REDIS_URL: "redis://redis:6379"
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - readingsdata:/app/data
     restart: unless-stopped
 
   api-prod:

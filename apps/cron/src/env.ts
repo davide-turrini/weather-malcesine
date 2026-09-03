@@ -11,4 +11,7 @@ export const env = useEnv({
     .url()
     .default('https://it.addicted-sports.com/webcam/gardasee/malcesine/'),
   LOGGER_URL: z.string().url().optional(),
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  ARCHIVE_SCHEDULE: z.string().default('5 0 * * *'), // ogni giorno alle 00:05
+  READINGS_ARCHIVE_DIR: z.string().default('./data/readings'),
 })

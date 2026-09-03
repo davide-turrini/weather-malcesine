@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { readings } from '@malcesine/db'
 import cron from 'node-cron'
+import { archiveDailyReadings } from '@/archive'
+import { cache } from '@/cache'
 import { connect, db, lockConn } from '@/db'
 import { env } from '@/env'
 import { logger } from '@/logger'
@@ -19,6 +21,15 @@ export function buildApp() {
   async function storeReading(reading: ScrapedReading | null): Promise<void> {
     if (!reading) return
     await db.insert(readings).values({ id: randomUUID(), ...reading })
+    try {
+      await cache.pushReading(reading.station, {
+        ...reading,
+        recordedAt: reading.recordedAt.toISOString(),
+      })
+    } catch (err: any) {
+      // la cache e' un extra (archiviazione futura): non deve mai far fallire lo scraping
+      logger.warn('push in cache fallito', { station: reading.station, error: err.message })
+    }
   }
 
   async function runHolfuy(): Promise<void> {
@@ -53,9 +64,16 @@ export function buildApp() {
     if (!cron.validate(env.SCRAPE_SCHEDULE)) {
       throw new Error(`SCRAPE_SCHEDULE non valido: ${env.SCRAPE_SCHEDULE}`)
     }
+    if (!cron.validate(env.ARCHIVE_SCHEDULE)) {
+      throw new Error(`ARCHIVE_SCHEDULE non valido: ${env.ARCHIVE_SCHEDULE}`)
+    }
     cron.schedule(env.SCRAPE_SCHEDULE, runHolfuy)
     cron.schedule(env.SCRAPE_SCHEDULE, runAddictedSport)
-    logger.info('scraper schedulati', { schedule: env.SCRAPE_SCHEDULE })
+    cron.schedule(env.ARCHIVE_SCHEDULE, archiveDailyReadings)
+    logger.info('scraper schedulati', {
+      schedule: env.SCRAPE_SCHEDULE,
+      archive: env.ARCHIVE_SCHEDULE,
+    })
 
     // prima esecuzione immediata, senza aspettare il primo tick
     await runHolfuy()
